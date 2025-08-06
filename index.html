@@ -1,0 +1,574 @@
+&lt;!DOCTYPE html&gt;<br />
+
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>
+Alışveriş Listesi
+</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<style>  
+        .drag-over {  
+            border: 2px dashed #3b82f6;  
+            background-color: #eff6ff;  
+        }  
+        .dragging {  
+            opacity: 0.5;  
+            transform: rotate(5deg);  
+        }  
+        .completed-item {  
+            text-decoration: line-through;  
+            opacity: 0.6;  
+        }  
+        .slide-in {  
+            animation: slideIn 0.3s ease-out;  
+        }  
+        @keyframes slideIn {  
+            from {  
+                opacity: 0;  
+                transform: translateY(-20px);  
+            }  
+            to {  
+                opacity: 1;  
+                transform: translateY(0);  
+            }  
+        }  
+        .fade-out {  
+            animation: fadeOut 0.3s ease-out forwards;  
+        }  
+        @keyframes fadeOut {  
+            from {  
+                opacity: 1;  
+                transform: scale(1);  
+            }  
+            to {  
+                opacity: 0;  
+                transform: scale(0.8);  
+            }  
+        }  
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen font-sans">
+<div class="container mx-auto px-4 py-6 max-w-2xl">
+<pre><code>    &lt;!-- Header --&gt;  
+    &lt;div class=&quot;bg-white rounded-2xl shadow-lg p-6 mb-6&quot;&gt;  
+        &lt;div class=&quot;flex items-center justify-between mb-4&quot;&gt;  
+            &lt;h1 class=&quot;text-3xl font-bold text-gray-800 flex items-center&quot;&gt;  
+                🛒 Alışveriş Listesi  
+            &lt;/h1&gt;  
+            &lt;div class=&quot;flex items-center space-x-2&quot;&gt;  
+                &lt;span class=&quot;text-sm text-gray-500&quot; id=&quot;itemCount&quot;&gt;0 ürün&lt;/span&gt;  
+                &lt;button id=&quot;shareBtn&quot; class=&quot;bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors&quot;&gt;  
+                    📤 Paylaş  
+                &lt;/button&gt;  
+            &lt;/div&gt;  
+        &lt;/div&gt;  
+          
+        &lt;!-- Add Item Form --&gt;  
+        &lt;div class=&quot;flex space-x-3&quot;&gt;  
+            &lt;input   
+                type=&quot;text&quot;   
+                id=&quot;newItem&quot;   
+                placeholder=&quot;Yeni ürün ekle...&quot;   
+                class=&quot;flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent&quot;  
+                maxlength=&quot;100&quot;  
+            &gt;  
+            &lt;button   
+                id=&quot;addBtn&quot;   
+                class=&quot;bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl font-medium transition-colors flex items-center&quot;  
+            &gt;  
+                ➕ Ekle  
+            &lt;/button&gt;  
+        &lt;/div&gt;  
+    &lt;/div&gt;  
+
+    &lt;!-- Controls --&gt;  
+    &lt;div class=&quot;bg-white rounded-2xl shadow-lg p-4 mb-6&quot;&gt;  
+        &lt;div class=&quot;flex flex-wrap items-center justify-between gap-3&quot;&gt;  
+            &lt;div class=&quot;flex items-center space-x-4&quot;&gt;  
+                &lt;button id=&quot;clearCompleted&quot; class=&quot;bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed&quot;&gt;  
+                    🗑️ Tamamlananları Temizle  
+                &lt;/button&gt;  
+                &lt;button id=&quot;toggleAll&quot; class=&quot;bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg font-medium transition-colors&quot;&gt;  
+                    ✅ Tümünü İşaretle  
+                &lt;/button&gt;  
+            &lt;/div&gt;  
+            &lt;div class=&quot;text-sm text-gray-600&quot;&gt;  
+                &lt;span id=&quot;completedCount&quot;&gt;0&lt;/span&gt; / &lt;span id=&quot;totalCount&quot;&gt;0&lt;/span&gt; tamamlandı  
+            &lt;/div&gt;  
+        &lt;/div&gt;  
+    &lt;/div&gt;  
+
+    &lt;!-- Shopping List --&gt;  
+    &lt;div class=&quot;bg-white rounded-2xl shadow-lg p-6&quot;&gt;  
+        &lt;div class=&quot;flex items-center justify-between mb-4&quot;&gt;  
+            &lt;h2 class=&quot;text-xl font-semibold text-gray-800&quot;&gt;Liste&lt;/h2&gt;  
+            &lt;div class=&quot;text-sm text-gray-500&quot;&gt;  
+                💡 Sıralamak için sürükleyin  
+            &lt;/div&gt;  
+        &lt;/div&gt;  
+          
+        &lt;div id=&quot;shoppingList&quot; class=&quot;space-y-3 min-h-[200px]&quot;&gt;  
+            &lt;!-- Items will be added here --&gt;  
+        &lt;/div&gt;  
+          
+        &lt;div id=&quot;emptyState&quot; class=&quot;text-center py-12 text-gray-500&quot;&gt;  
+            &lt;div class=&quot;text-6xl mb-4&quot;&gt;📝&lt;/div&gt;  
+            &lt;p class=&quot;text-lg font-medium mb-2&quot;&gt;Liste boş&lt;/p&gt;  
+            &lt;p class=&quot;text-sm&quot;&gt;Yukarıdan yeni ürün ekleyerek başlayın!&lt;/p&gt;  
+        &lt;/div&gt;  
+    &lt;/div&gt;  
+
+    &lt;!-- Sync Status --&gt;  
+    &lt;div class=&quot;mt-6 text-center&quot;&gt;  
+        &lt;div id=&quot;syncStatus&quot; class=&quot;inline-flex items-center space-x-2 bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm&quot;&gt;  
+            &lt;div class=&quot;w-2 h-2 bg-green-500 rounded-full animate-pulse&quot;&gt;&lt;/div&gt;  
+            &lt;span&gt;Bulut ile senkronize ✅&lt;/span&gt;  
+        &lt;/div&gt;  
+    &lt;/div&gt;  
+
+    &lt;!-- Share Modal --&gt;  
+    &lt;div id=&quot;shareModal&quot; class=&quot;fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4&quot;&gt;  
+        &lt;div class=&quot;bg-white rounded-2xl p-6 max-w-md w-full&quot;&gt;  
+            &lt;h3 class=&quot;text-xl font-bold mb-4&quot;&gt;Listeyi Paylaş&lt;/h3&gt;  
+            &lt;p class=&quot;text-gray-600 mb-4&quot;&gt;Bu bağlantıyı paylaşarak diğer kişilerin listeyi görüntülemesini ve düzenlemesini sağlayabilirsiniz:&lt;/p&gt;  
+            &lt;div class=&quot;bg-gray-100 p-3 rounded-lg mb-4&quot;&gt;  
+                &lt;code id=&quot;shareLink&quot; class=&quot;text-sm break-all&quot;&gt;https://canva.com/shopping-list/shared/abc123&lt;/code&gt;  
+            &lt;/div&gt;  
+            &lt;div class=&quot;flex space-x-3&quot;&gt;  
+                &lt;button id=&quot;copyLink&quot; class=&quot;flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg font-medium transition-colors&quot;&gt;  
+                    📋 Kopyala  
+                &lt;/button&gt;  
+                &lt;button id=&quot;closeModal&quot; class=&quot;flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-lg font-medium transition-colors&quot;&gt;  
+                    Kapat  
+                &lt;/button&gt;  
+            &lt;/div&gt;  
+        &lt;/div&gt;  
+    &lt;/div&gt;  
+&lt;/div&gt;  
+
+&lt;script&gt;  
+    // Firebase Configuration  
+    const firebaseConfig = {  </code></pre>
+<p>  apiKey: “AIzaSyA5RqEa4yOSFCbVxs7emPTKXpBAjhM4CII”,<br />
+  authDomain: “alisverislistesi1003.firebaseapp.com”,<br />
+  databaseURL:
+“https://alisverislistesi1003-default-rtdb.firebaseio.com”,<br />
+  projectId: “alisverislistesi1003”,<br />
+  storageBucket: “alisverislistesi1003.firebasestorage.app”,<br />
+  messagingSenderId: “1083302143878”,<br />
+  appId: “1:1083302143878:web:b9206928faf515e2fe2e07”,<br />
+  measurementId: “G-RJNB0MRPC1”<br />
+};</p>
+<pre><code>    // Initialize Firebase  
+    firebase.initializeApp(firebaseConfig);  
+    const database = firebase.database();  
+
+    class ShoppingList {  
+        constructor() {  
+            this.items = [];  
+            this.draggedItem = null;  
+            this.listId = this.getListId();  
+            this.listRef = database.ref(`shoppingLists/${this.listId}`);  
+              
+            this.init();  
+            this.setupFirebaseListeners();  
+        }  
+
+        init() {  
+            // Event listeners  
+            document.getElementById(&#39;addBtn&#39;).addEventListener(&#39;click&#39;, () =&gt; this.addItem());  
+            document.getElementById(&#39;newItem&#39;).addEventListener(&#39;keypress&#39;, (e) =&gt; {  
+                if (e.key === &#39;Enter&#39;) this.addItem();  
+            });  
+            document.getElementById(&#39;clearCompleted&#39;).addEventListener(&#39;click&#39;, () =&gt; this.clearCompleted());  
+            document.getElementById(&#39;toggleAll&#39;).addEventListener(&#39;click&#39;, () =&gt; this.toggleAll());  
+            document.getElementById(&#39;shareBtn&#39;).addEventListener(&#39;click&#39;, () =&gt; this.showShareModal());  
+            document.getElementById(&#39;closeModal&#39;).addEventListener(&#39;click&#39;, () =&gt; this.hideShareModal());  
+            document.getElementById(&#39;copyLink&#39;).addEventListener(&#39;click&#39;, () =&gt; this.copyShareLink());  
+
+            // Close modal on outside click  
+            document.getElementById(&#39;shareModal&#39;).addEventListener(&#39;click&#39;, (e) =&gt; {  
+                if (e.target.id === &#39;shareModal&#39;) this.hideShareModal();  
+            });  
+        }  
+
+        setupFirebaseListeners() {  
+            // Listen for real-time updates  
+            this.listRef.on(&#39;value&#39;, (snapshot) =&gt; {  
+                const data = snapshot.val();  
+                if (data &amp;&amp; data.items) {  
+                    this.items = Object.values(data.items).sort((a, b) =&gt; b.order - a.order);  
+                } else {  
+                    this.items = [];  
+                }  
+                this.render();  
+                this.updateCounts();  
+                this.showSyncStatus(&#39;synced&#39;);  
+            });  
+
+            // Listen for connection status  
+            const connectedRef = database.ref(&#39;.info/connected&#39;);  
+            connectedRef.on(&#39;value&#39;, (snapshot) =&gt; {  
+                if (snapshot.val() === true) {  
+                    this.showSyncStatus(&#39;connected&#39;);  
+                } else {  
+                    this.showSyncStatus(&#39;disconnected&#39;);  
+                }  
+            });  
+        }  
+
+        getListId() {  
+            // Get list ID from URL or create new one  
+            const urlParams = new URLSearchParams(window.location.search);  
+            let listId = urlParams.get(&#39;list&#39;);  
+              
+            if (!listId) {  
+                listId = localStorage.getItem(&#39;currentListId&#39;);  
+            }  
+              
+            if (!listId) {  
+                listId = &#39;list_&#39; + Date.now() + &#39;_&#39; + Math.random().toString(36).substr(2, 9);  
+                localStorage.setItem(&#39;currentListId&#39;, listId);  
+            }  
+              
+            return listId;  
+        }  
+
+        addItem() {  
+            const input = document.getElementById(&#39;newItem&#39;);  
+            const text = input.value.trim();  
+              
+            if (text) {  
+                const itemId = &#39;item_&#39; + Date.now() + &#39;_&#39; + Math.random().toString(36).substr(2, 9);  
+                const item = {  
+                    id: itemId,  
+                    text: text,  
+                    completed: false,  
+                    createdAt: new Date().toISOString(),  
+                    order: Date.now()  
+                };  
+                  
+                // Save to Firebase  
+                this.listRef.child(&#39;items&#39;).child(itemId).set(item)  
+                    .then(() =&gt; {  
+                        input.value = &#39;&#39;;  
+                        this.showSyncStatus(&#39;syncing&#39;);  
+                    })  
+                    .catch((error) =&gt; {  
+                        console.error(&#39;Error adding item:&#39;, error);  
+                        this.showSyncStatus(&#39;error&#39;);  
+                    });  
+            }  
+        }  
+
+        toggleItem(id) {  
+            this.showSyncStatus(&#39;syncing&#39;);  
+            this.listRef.child(&#39;items&#39;).child(id).child(&#39;completed&#39;).transaction((completed) =&gt; {  
+                return !completed;  
+            }).catch((error) =&gt; {  
+                console.error(&#39;Error toggling item:&#39;, error);  
+                this.showSyncStatus(&#39;error&#39;);  
+            });  
+        }  
+
+        editItem(id, newText) {  
+            if (newText.trim()) {  
+                this.showSyncStatus(&#39;syncing&#39;);  
+                this.listRef.child(&#39;items&#39;).child(id).child(&#39;text&#39;).set(newText.trim())  
+                    .catch((error) =&gt; {  
+                        console.error(&#39;Error editing item:&#39;, error);  
+                        this.showSyncStatus(&#39;error&#39;);  
+                    });  
+            }  
+        }  
+
+        deleteItem(id) {  
+            const itemElement = document.querySelector(`[data-id=&quot;${id}&quot;]`);  
+            if (itemElement) {  
+                itemElement.classList.add(&#39;fade-out&#39;);  
+                setTimeout(() =&gt; {  
+                    this.showSyncStatus(&#39;syncing&#39;);  
+                    this.listRef.child(&#39;items&#39;).child(id).remove()  
+                        .catch((error) =&gt; {  
+                            console.error(&#39;Error deleting item:&#39;, error);  
+                            this.showSyncStatus(&#39;error&#39;);  
+                        });  
+                }, 300);  
+            }  
+        }  
+
+        clearCompleted() {  
+            const completedItems = document.querySelectorAll(&#39;.completed-item&#39;);  
+            completedItems.forEach(item =&gt; item.classList.add(&#39;fade-out&#39;));  
+              
+            setTimeout(() =&gt; {  
+                this.showSyncStatus(&#39;syncing&#39;);  
+                const updates = {};  
+                this.items.forEach(item =&gt; {  
+                    if (item.completed) {  
+                        updates[`items/${item.id}`] = null;  
+                    }  
+                });  
+                  
+                this.listRef.update(updates)  
+                    .catch((error) =&gt; {  
+                        console.error(&#39;Error clearing completed items:&#39;, error);  
+                        this.showSyncStatus(&#39;error&#39;);  
+                    });  
+            }, 300);  
+        }  
+
+        toggleAll() {  
+            const allCompleted = this.items.every(item =&gt; item.completed);  
+            const newCompletedState = !allCompleted;  
+              
+            this.showSyncStatus(&#39;syncing&#39;);  
+            const updates = {};  
+            this.items.forEach(item =&gt; {  
+                updates[`items/${item.id}/completed`] = newCompletedState;  
+            });  
+              
+            this.listRef.update(updates)  
+                .catch((error) =&gt; {  
+                    console.error(&#39;Error toggling all items:&#39;, error);  
+                    this.showSyncStatus(&#39;error&#39;);  
+                });  
+        }  
+
+        moveItem(fromIndex, toIndex) {  
+            const item = this.items[fromIndex];  
+            const targetItem = this.items[toIndex];  
+              
+            // Calculate new order value  
+            let newOrder;  
+            if (toIndex === 0) {  
+                newOrder = (this.items[0]?.order || 0) + 1000;  
+            } else if (toIndex === this.items.length - 1) {  
+                newOrder = (this.items[this.items.length - 1]?.order || 0) - 1000;  
+            } else {  
+                const prevOrder = this.items[toIndex - 1]?.order || 0;  
+                const nextOrder = this.items[toIndex + 1]?.order || 0;  
+                newOrder = (prevOrder + nextOrder) / 2;  
+            }  
+              
+            this.showSyncStatus(&#39;syncing&#39;);  
+            this.listRef.child(&#39;items&#39;).child(item.id).child(&#39;order&#39;).set(newOrder)  
+                .catch((error) =&gt; {  
+                    console.error(&#39;Error moving item:&#39;, error);  
+                    this.showSyncStatus(&#39;error&#39;);  
+                });  
+        }  
+
+        render() {  
+            const listContainer = document.getElementById(&#39;shoppingList&#39;);  
+            const emptyState = document.getElementById(&#39;emptyState&#39;);  
+              
+            if (this.items.length === 0) {  
+                listContainer.innerHTML = &#39;&#39;;  
+                emptyState.style.display = &#39;block&#39;;  
+                return;  
+            }  
+              
+            emptyState.style.display = &#39;none&#39;;  
+            listContainer.innerHTML = this.items.map((item, index) =&gt; `  
+                &lt;div   
+                    class=&quot;flex items-center space-x-3 p-4 bg-gray-50 rounded-xl border-2 border-transparent hover:border-blue-200 transition-all cursor-move slide-in ${item.completed ? &#39;completed-item&#39; : &#39;&#39;}&quot;  
+                    draggable=&quot;true&quot;  
+                    data-id=&quot;${item.id}&quot;  
+                    data-index=&quot;${index}&quot;  
+                &gt;  
+                    &lt;input   
+                        type=&quot;checkbox&quot;   
+                        ${item.completed ? &#39;checked&#39; : &#39;&#39;}   
+                        class=&quot;w-5 h-5 text-blue-600 rounded focus:ring-blue-500&quot;  
+                        onchange=&quot;shoppingList.toggleItem(${item.id})&quot;  
+                    &gt;  
+                    &lt;div class=&quot;flex-1 min-w-0&quot;&gt;  
+                        &lt;input   
+                            type=&quot;text&quot;   
+                            value=&quot;${item.text}&quot;   
+                            class=&quot;w-full bg-transparent border-none outline-none text-gray-800 font-medium ${item.completed ? &#39;line-through&#39; : &#39;&#39;}&quot;  
+                            onblur=&quot;shoppingList.editItem(${item.id}, this.value)&quot;  
+                            onkeypress=&quot;if(event.key===&#39;Enter&#39;) this.blur()&quot;  
+                            maxlength=&quot;100&quot;  
+                        &gt;  
+                        &lt;div class=&quot;text-xs text-gray-500 mt-1&quot;&gt;  
+                            ${new Date(item.createdAt).toLocaleDateString(&#39;tr-TR&#39;)}  
+                        &lt;/div&gt;  
+                    &lt;/div&gt;  
+                    &lt;button   
+                        onclick=&quot;shoppingList.deleteItem(${item.id})&quot;   
+                        class=&quot;text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors&quot;  
+                        title=&quot;Sil&quot;  
+                    &gt;  
+                        🗑️  
+                    &lt;/button&gt;  
+                &lt;/div&gt;  
+            `).join(&#39;&#39;);  
+
+            // Add drag and drop functionality  
+            this.addDragAndDrop();  
+        }  
+
+        addDragAndDrop() {  
+            const items = document.querySelectorAll(&#39;[draggable=&quot;true&quot;]&#39;);  
+              
+            items.forEach(item =&gt; {  
+                item.addEventListener(&#39;dragstart&#39;, (e) =&gt; {  
+                    this.draggedItem = item;  
+                    item.classList.add(&#39;dragging&#39;);  
+                    e.dataTransfer.effectAllowed = &#39;move&#39;;  
+                });  
+
+                item.addEventListener(&#39;dragend&#39;, () =&gt; {  
+                    item.classList.remove(&#39;dragging&#39;);  
+                    this.draggedItem = null;  
+                    // Remove all drag-over classes  
+                    items.forEach(i =&gt; i.classList.remove(&#39;drag-over&#39;));  
+                });  
+
+                item.addEventListener(&#39;dragover&#39;, (e) =&gt; {  
+                    e.preventDefault();  
+                    e.dataTransfer.dropEffect = &#39;move&#39;;  
+                      
+                    if (this.draggedItem &amp;&amp; this.draggedItem !== item) {  
+                        item.classList.add(&#39;drag-over&#39;);  
+                    }  
+                });  
+
+                item.addEventListener(&#39;dragleave&#39;, () =&gt; {  
+                    item.classList.remove(&#39;drag-over&#39;);  
+                });  
+
+                item.addEventListener(&#39;drop&#39;, (e) =&gt; {  
+                    e.preventDefault();  
+                    item.classList.remove(&#39;drag-over&#39;);  
+                      
+                    if (this.draggedItem &amp;&amp; this.draggedItem !== item) {  
+                        const fromIndex = parseInt(this.draggedItem.dataset.index);  
+                        const toIndex = parseInt(item.dataset.index);  
+                        this.moveItem(fromIndex, toIndex);  
+                    }  
+                });  
+            });  
+        }  
+
+        updateCounts() {  
+            const total = this.items.length;  
+            const completed = this.items.filter(item =&gt; item.completed).length;  
+              
+            document.getElementById(&#39;itemCount&#39;).textContent = `${total} ürün`;  
+            document.getElementById(&#39;totalCount&#39;).textContent = total;  
+            document.getElementById(&#39;completedCount&#39;).textContent = completed;  
+              
+            // Update clear button state  
+            const clearBtn = document.getElementById(&#39;clearCompleted&#39;);  
+            clearBtn.disabled = completed === 0;  
+              
+            // Update toggle all button text  
+            const toggleBtn = document.getElementById(&#39;toggleAll&#39;);  
+            const allCompleted = total &gt; 0 &amp;&amp; completed === total;  
+            toggleBtn.textContent = allCompleted ? &#39;↩️ Tümünü Geri Al&#39; : &#39;✅ Tümünü İşaretle&#39;;  
+        }  
+
+        showShareModal() {  
+            document.getElementById(&#39;shareModal&#39;).classList.remove(&#39;hidden&#39;);  
+            document.getElementById(&#39;shareModal&#39;).classList.add(&#39;flex&#39;);  
+        }  
+
+        hideShareModal() {  
+            document.getElementById(&#39;shareModal&#39;).classList.add(&#39;hidden&#39;);  
+            document.getElementById(&#39;shareModal&#39;).classList.remove(&#39;flex&#39;);  
+        }  
+
+        copyShareLink() {  
+            const shareUrl = `${window.location.origin}${window.location.pathname}?list=${this.listId}`;  
+            document.getElementById(&#39;shareLink&#39;).textContent = shareUrl;  
+              
+            navigator.clipboard.writeText(shareUrl).then(() =&gt; {  
+                const btn = document.getElementById(&#39;copyLink&#39;);  
+                const originalText = btn.textContent;  
+                btn.textContent = &#39;✅ Kopyalandı!&#39;;  
+                btn.classList.add(&#39;bg-green-500&#39;, &#39;hover:bg-green-600&#39;);  
+                btn.classList.remove(&#39;bg-blue-500&#39;, &#39;hover:bg-blue-600&#39;);  
+                  
+                setTimeout(() =&gt; {  
+                    btn.textContent = originalText;  
+                    btn.classList.remove(&#39;bg-green-500&#39;, &#39;hover:bg-green-600&#39;);  
+                    btn.classList.add(&#39;bg-blue-500&#39;, &#39;hover:bg-blue-600&#39;);  
+                }, 2000);  
+            });  
+        }  
+
+        showSyncStatus(status = &#39;syncing&#39;) {  
+            const statusElement = document.getElementById(&#39;syncStatus&#39;);  
+              
+            switch(status) {  
+                case &#39;syncing&#39;:  
+                    statusElement.className = &#39;inline-flex items-center space-x-2 bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-sm&#39;;  
+                    statusElement.innerHTML = &#39;&lt;div class=&quot;w-2 h-2 bg-blue-500 rounded-full animate-spin&quot;&gt;&lt;/div&gt;&lt;span&gt;Senkronize ediliyor...&lt;/span&gt;&#39;;  
+                    break;  
+                case &#39;synced&#39;:  
+                case &#39;connected&#39;:  
+                    statusElement.className = &#39;inline-flex items-center space-x-2 bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm&#39;;  
+                    statusElement.innerHTML = &#39;&lt;div class=&quot;w-2 h-2 bg-green-500 rounded-full animate-pulse&quot;&gt;&lt;/div&gt;&lt;span&gt;Firebase ile senkronize ✅&lt;/span&gt;&#39;;  
+                    break;  
+                case &#39;disconnected&#39;:  
+                    statusElement.className = &#39;inline-flex items-center space-x-2 bg-yellow-100 text-yellow-800 px-4 py-2 rounded-full text-sm&#39;;  
+                    statusElement.innerHTML = &#39;&lt;div class=&quot;w-2 h-2 bg-yellow-500 rounded-full&quot;&gt;&lt;/div&gt;&lt;span&gt;Bağlantı kesildi ⚠️&lt;/span&gt;&#39;;  
+                    break;  
+                case &#39;error&#39;:  
+                    statusElement.className = &#39;inline-flex items-center space-x-2 bg-red-100 text-red-800 px-4 py-2 rounded-full text-sm&#39;;  
+                    statusElement.innerHTML = &#39;&lt;div class=&quot;w-2 h-2 bg-red-500 rounded-full&quot;&gt;&lt;/div&gt;&lt;span&gt;Senkronizasyon hatası ❌&lt;/span&gt;&#39;;  
+                    break;  
+            }  
+        }  
+    }  
+
+    // Initialize the app  
+    const shoppingList = new ShoppingList();  
+
+    // Firebase Setup Instructions (Demo Mode)  
+    if (firebaseConfig.apiKey === &quot;YOUR_API_KEY&quot;) {  
+        document.getElementById(&#39;syncStatus&#39;).innerHTML = `  
+            &lt;div class=&quot;inline-flex items-center space-x-2 bg-orange-100 text-orange-800 px-4 py-2 rounded-full text-sm&quot;&gt;  
+                &lt;div class=&quot;w-2 h-2 bg-orange-500 rounded-full&quot;&gt;&lt;/div&gt;  
+                &lt;span&gt;Demo Modu - Firebase yapılandırması gerekli 🔧&lt;/span&gt;  
+            &lt;/div&gt;  
+        `;  
+          
+        // Show setup instructions  
+        setTimeout(() =&gt; {  
+            const instructions = `  
+                🔥 Firebase Kurulum Talimatları:  
+                  
+                1. Firebase Console&#39;a gidin: https://console.firebase.google.com  
+                2. Yeni proje oluşturun veya mevcut projeyi seçin  
+                3. &quot;Realtime Database&quot; özelliğini etkinleştirin  
+                4. Güvenlik kurallarını şu şekilde ayarlayın:  
+                  
+                {  
+                  &quot;rules&quot;: {  
+                    &quot;shoppingLists&quot;: {  
+                      &quot;.read&quot;: true,  
+                      &quot;.write&quot;: true  
+                    }  
+                  }  
+                }  
+                  
+                5. Proje ayarlarından Web uygulaması ekleyin  
+                6. Yapılandırma bilgilerini kopyalayıp firebaseConfig nesnesine yapıştırın  
+                  
+                ⚠️ Şu anda demo modunda çalışıyor - veriler yerel olarak saklanıyor.  
+            `;  
+            console.log(instructions);  
+        }, 2000);  
+    }  
+&lt;/script&gt;  </code></pre>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96aecff971a0aa2e',t:'MTc1NDQ4NjIyNS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
+</body>
